@@ -66,6 +66,8 @@ export async function getFileContent(filePath: string): Promise<string> {
 }
 
 export async function generateFileList(folderPath: string): Promise<string[]> {
+  const originalCwd = process.cwd();
+
   try {
     // 切换到指定目录
     process.chdir(folderPath);
@@ -101,5 +103,176 @@ export async function generateFileList(folderPath: string): Promise<string[]> {
   } catch (error) {
     console.error("Error generating file list:", error);
     throw new Error("Failed to generate file list");
+  } finally {
+    // 恢复原始工作目录
+    process.chdir(originalCwd);
+  }
+}
+
+export async function createFileWithContent(
+  filePath: string,
+  content: string
+): Promise<void> {
+  try {
+    // 规范化路径
+    const normalizedPath = path.normalize(filePath);
+
+    // 获取目录路径
+    const dirPath = path.dirname(normalizedPath);
+
+    // 确保目录存在，如果不存在则创建
+    await fs.mkdir(dirPath, { recursive: true });
+
+    // 写入文件内容
+    await fs.writeFile(normalizedPath, content, "utf-8");
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to create file: ${error.message}`);
+    } else {
+      throw new Error(`Failed to create file: Unknown error`);
+    }
+  }
+}
+
+type FileInfo = {
+  fullPath: string;
+  changeType: "added" | "modified" | "deleted" | "untracked";
+  content: string | null;
+  diff: string;
+};
+
+async function getDirectoryContents(dirPath: string): Promise<FileInfo[]> {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  let contents: FileInfo[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      contents = contents.concat(await getDirectoryContents(fullPath));
+    } else {
+      contents.push({
+        fullPath,
+        changeType: "untracked",
+        content: await getFileContent(fullPath),
+        diff: "",
+      });
+    }
+  }
+
+  return contents;
+}
+
+export async function getChangedFilesInfo(
+  folderPath: string
+): Promise<FileInfo[]> {
+  try {
+    const gitRoot = await getGitRoot(folderPath);
+    const relativePath = path.relative(gitRoot, folderPath);
+    const pathSpec = relativePath || ".";
+
+    const { stdout } = await execPromise(
+      `git -C "${gitRoot}" status --porcelain "${pathSpec}"`
+    );
+
+    const changedFiles = stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => ({
+        status: line.slice(0, 2).trim(),
+        file: line.slice(3),
+      }))
+      .filter(({ file }) => {
+        // 如果 relativePath 为空，不进行过滤
+        if (!relativePath) return true;
+        return file.startsWith(relativePath);
+      });
+
+    let filesInfo: FileInfo[] = [];
+
+    for (const { status, file } of changedFiles) {
+      const fullPath = path.join(gitRoot, file);
+      let changeType: "added" | "modified" | "deleted" | "untracked";
+      let content: string | null = null;
+      let diff: string = "";
+
+      if (status === "D") {
+        filesInfo.push({
+          fullPath,
+          changeType: "deleted",
+          content: "",
+          diff: (await execPromise(`git -C "${gitRoot}" diff -- "${file}"`))
+            .stdout,
+        });
+        continue;
+      }
+
+      if (status === "A") {
+        filesInfo.push({
+          fullPath,
+          changeType: "added",
+          content: await getFileContent(fullPath),
+          diff: "",
+        });
+        continue;
+      }
+
+      const isDirectory = (await fs.stat(fullPath)).isDirectory();
+
+      if (isDirectory && (status === "??" || status === "A")) {
+        const dirContents = await getDirectoryContents(fullPath);
+        filesInfo = filesInfo.concat(dirContents);
+        continue;
+      }
+      console.log("💥", status, fullPath);
+      switch (status) {
+        case "A":
+          changeType = "added";
+          content = await getFileContent(fullPath);
+          diff = (
+            await execPromise(
+              `git -C "${gitRoot}" diff --no-index /dev/null "${file}"`
+            )
+          ).stdout;
+          break;
+        case "M":
+          changeType = "modified";
+          content = await getFileContent(fullPath);
+          diff = (await execPromise(`git -C "${gitRoot}" diff "${file}"`))
+            .stdout;
+          break;
+        case "D":
+          changeType = "deleted";
+          diff = (await execPromise(`git -C "${gitRoot}" diff -- "${file}"`))
+            .stdout;
+          break;
+        case "??":
+          changeType = "untracked";
+          content = await getFileContent(fullPath);
+          break;
+        default:
+          changeType = "modified";
+          content = await getFileContent(fullPath);
+          diff = (await execPromise(`git -C "${gitRoot}" diff "${file}"`))
+            .stdout;
+      }
+
+      filesInfo.push({ fullPath, changeType, content, diff });
+    }
+
+    return filesInfo;
+  } catch (error) {
+    console.error("Error getting changed files info:", error);
+    throw new Error("Failed to get changed files info");
+  }
+}
+
+async function getGitRoot(dir: string): Promise<string> {
+  try {
+    const { stdout } = await execPromise("git rev-parse --show-toplevel", {
+      cwd: dir,
+    });
+    return stdout.trim();
+  } catch (error) {
+    throw new Error("Not a git repository");
   }
 }

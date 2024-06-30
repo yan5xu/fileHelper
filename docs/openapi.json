@@ -1,83 +1,153 @@
 {
-    "openapi": "3.0.0",
-    "info": {
-      "title": "File Helper API",
-      "description": "API for generating file trees and retrieving file contents",
-      "version": "1.0.0"
-    },
-    "servers": [
-      {
-        "url": "http://192.168.1.9:3003",
-        "description": "Local development server"
+  "openapi": "3.0.0",
+  "info": {
+    "title": "File Helper API",
+    "description": "API for generating file trees, retrieving file contents, and managing file changes",
+    "version": "1.1.0"
+  },
+  "servers": [
+    {
+      "url": "http://192.168.1.9:3003",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/generate-tree": {
+      "post": {
+        "summary": "Generate a full file tree",
+        "description": "Generate a complete file tree including Git tracked, modified, and untracked files",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folderPath": {
+                    "type": "string",
+                    "description": "Path to the folder for which to generate the tree"
+                  }
+                },
+                "required": ["folderPath"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tree": {
+                      "type": "string",
+                      "description": "Generated file tree"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
-    ],
-    "paths": {
-      "/api/file-list": {
-        "post": {
-          "summary": "get a file list",
-          "description": "get a list of files including Git tracked, modified, and untracked files",
-          "requestBody": {
-            "required": true,
+    },
+    "/api/file-list": {
+      "post": {
+        "summary": "Get a file list",
+        "description": "Get a list of files including Git tracked, modified, and untracked files",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folderPath": {
+                    "type": "string",
+                    "description": "Path to the folder for which to generate the file list"
+                  }
+                },
+                "required": ["folderPath"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "folderPath": {
-                      "type": "string",
-                      "description": "Path to the folder for which to generate the file list"
+                    "fileList": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "List of file paths"
                     }
-                  },
-                  "required": ["folderPath"]
+                  }
                 }
               }
             }
           },
-          "responses": {
-            "200": {
-              "description": "Successful response",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "fileList": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        },
-                        "description": "List of file paths"
-                      }
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     }
                   }
                 }
               }
-            },
-            "400": {
-              "description": "Bad request",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "error": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            "500": {
-              "description": "Internal server error",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "error": {
-                        "type": "string"
-                      }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     }
                   }
                 }
@@ -85,70 +155,78 @@
             }
           }
         }
-      },
-      "/api/file-tree": {
-        "post": {
-          "summary": "Get a full file tree",
-          "description": "Get a complete file tree including Git tracked, modified, and untracked files",
-          "requestBody": {
-            "required": true,
+      }
+    },
+    "/api/file-content": {
+      "post": {
+        "summary": "Get file content",
+        "description": "Retrieves the content of a specified file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "filePath": {
+                    "type": "string",
+                    "description": "Path to the file to read"
+                  },
+                  "folderPath": {
+                    "type": "string",
+                    "description": "Optional base path for the file"
+                  }
+                },
+                "required": ["filePath"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "folderPath": {
+                    "content": {
                       "type": "string",
-                      "description": "Path to the folder for which to generate the tree"
+                      "description": "Content of the file"
+                    },
+                    "fullPath": {
+                      "type": "string",
+                      "description": "Full path of the file"
                     }
-                  },
-                  "required": ["folderPath"]
+                  }
                 }
               }
             }
           },
-          "responses": {
-            "200": {
-              "description": "Successful response",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "tree": {
-                        "type": "string",
-                        "description": "Generated file tree"
-                      }
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     }
                   }
                 }
               }
-            },
-            "400": {
-              "description": "Bad request",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "error": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            "500": {
-              "description": "Internal server error",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "error": {
-                        "type": "string"
-                      }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     }
                   }
                 }
@@ -156,70 +234,180 @@
             }
           }
         }
-      },
-      "/api/file-content": {
-        "post": {
-          "summary": "Get file content",
-          "description": "Retrieves the content of a specified file",
-          "requestBody": {
-            "required": true,
+      }
+    },
+    "/api/create-file": {
+      "post": {
+        "summary": "Create a new file",
+        "description": "Creates a new file with the specified content",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "filePath": {
+                    "type": "string",
+                    "description": "Path to the new file"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Content of the new file"
+                  }
+                },
+                "required": ["filePath", "content"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates if the file was created successfully"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Success message"
+                    },
                     "filePath": {
                       "type": "string",
-                      "description": "Path to the file to read"
+                      "description": "Path of the created file"
                     }
-                  },
-                  "required": ["filePath"]
+                  }
                 }
               }
             }
           },
-          "responses": {
-            "200": {
-              "description": "Successful response",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "content": {
-                        "type": "string",
-                        "description": "Content of the file"
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/changed-files": {
+      "post": {
+        "summary": "Get changed files information",
+        "description": "Retrieves information about changed files in a Git repository",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folderPath": {
+                    "type": "string",
+                    "description": "Path to the folder to check for changes"
+                  }
+                },
+                "required": ["folderPath"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changedFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "fullPath": {
+                            "type": "string",
+                            "description": "Full path of the changed file"
+                          },
+                          "changeType": {
+                            "type": "string",
+                            "enum": [
+                              "added",
+                              "modified",
+                              "deleted",
+                              "untracked"
+                            ],
+                            "description": "Type of change"
+                          },
+                          "content": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Current content of the file (null for deleted files)"
+                          },
+                          "diff": {
+                            "type": "string",
+                            "description": "Git diff output for the file"
+                          }
+                        }
                       }
                     }
                   }
                 }
               }
-            },
-            "400": {
-              "description": "Bad request",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "error": {
-                        "type": "string"
-                      }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     }
                   }
                 }
               }
-            },
-            "500": {
-              "description": "Internal server error",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "error": {
-                        "type": "string"
-                      }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     }
                   }
                 }
@@ -230,4 +418,4 @@
       }
     }
   }
-  
+}
