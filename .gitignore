@@ -103,3 +103,5 @@ coverage/
 
 # CP
 temp/
+docs/current_iter
+project_docs_manager.sh
