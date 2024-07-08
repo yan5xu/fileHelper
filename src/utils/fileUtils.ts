@@ -60,8 +60,19 @@ export async function getFileContent(filePath: string): Promise<string> {
   try {
     const content = await fs.readFile(filePath, "utf-8");
     return content;
-  } catch (error) {
-    throw new Error(`Failed to read file: ${error}`);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      if ('code' in error && error.code === 'ENOENT') {
+        // 文件不存在
+        return "";
+      } else {
+        // 其他错误
+        throw new Error(`Failed to read file: ${error.message}`);
+      }
+    } else {
+      // 非 Error 类型的错误
+      throw new Error('An unknown error occurred');
+    }
   }
 }
 
@@ -72,34 +83,31 @@ export async function generateFileList(folderPath: string): Promise<string[]> {
     // 切换到指定目录
     process.chdir(folderPath);
 
-    // 定义Git命令
-    const gitCommands = [
-      "git ls-files",
-      "git ls-files --modified",
-      "git diff --cached --name-only",
-      "git ls-files --others --exclude-standard",
-    ];
+    // 获取当前 Git 索引的树对象
+    const { stdout: treeish } = await execPromise("git write-tree");
 
-    // 并行执行Git命令
-    const results = await Promise.all(
-      gitCommands.map((cmd) => execPromise(cmd))
+    // 使用 ls-tree 命令列出文件
+    const { stdout } = await execPromise(
+      `git ls-tree -r --name-only ${treeish.trim()} .`
     );
 
-    // 收集并处理文件列表
-    const fileSet = new Set<string>();
-    results.forEach(({ stdout }) => {
-      stdout
-        .split(os.EOL)
-        .filter(Boolean)
-        .forEach((file) => fileSet.add(file));
-    });
+    // 处理输出
+    const files = stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((file) => decodeURIComponent(file.trim()));
 
-    // 处理文件名
-    const decodedFiles = Array.from(fileSet).map((file) =>
-      decodeURIComponent(file.replace(/"/g, ""))
+    // 获取未跟踪的文件
+    const { stdout: untrackedOutput } = await execPromise(
+      "git ls-files --others --exclude-standard"
     );
+    const untrackedFiles = untrackedOutput
+      .split("\n")
+      .filter(Boolean)
+      .map((file) => decodeURIComponent(file.trim()));
 
-    return decodedFiles;
+    // 合并跟踪的和未跟踪的文件
+    return Array.from(new Set([...files, ...untrackedFiles])).sort();
   } catch (error) {
     console.error("Error generating file list:", error);
     throw new Error("Failed to generate file list");
@@ -112,7 +120,7 @@ export async function generateFileList(folderPath: string): Promise<string[]> {
 export async function createFileWithContent(
   filePath: string,
   content: string
-): Promise<void> {
+): Promise<string> {
   try {
     // 规范化路径
     const normalizedPath = path.normalize(filePath);
@@ -123,14 +131,36 @@ export async function createFileWithContent(
     // 确保目录存在，如果不存在则创建
     await fs.mkdir(dirPath, { recursive: true });
 
+    // 检查文件是否存在
+    let finalPath = normalizedPath;
+    let counter = 1;
+
+    while (await fileExists(finalPath)) {
+      const ext = path.extname(normalizedPath);
+      const baseName = path.basename(normalizedPath, ext);
+      finalPath = path.join(dirPath, `${baseName}_${counter}${ext}`);
+      counter++;
+    }
+
     // 写入文件内容
-    await fs.writeFile(normalizedPath, content, "utf-8");
+    await fs.writeFile(finalPath, content, "utf-8");
+
+    return finalPath;
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(`Failed to create file: ${error.message}`);
     } else {
       throw new Error(`Failed to create file: Unknown error`);
     }
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -210,8 +240,8 @@ export async function getChangedFilesInfo(
         filesInfo.push({
           fullPath,
           changeType: "added",
-          content: await getFileContent(fullPath),
-          diff: "",
+          content: "",
+          diff: await getFileContent(fullPath),
         });
         continue;
       }
